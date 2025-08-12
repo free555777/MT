@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MT</title>
+  <style>
+    :root{
+      --light-green:#E8F5E9;
+      --white:#FFFFFF;
+      --green:#4CAF50;
+      --red:#F44336;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+    body{background:var(--light-green);display:flex;flex-direction:column;height:100vh;color:#222}
+    header{background:var(--white);padding:1rem 1.2rem;font-size:1.3rem;font-weight:600;display:flex;align-items:center}
+    header #wallet{margin-left:auto;font-weight:700;color:var(--green)}
+    main{flex:1;overflow:auto;padding:1rem}
+    h2{font-size:1.1rem;margin:.5rem 0}
+    .dayBlock{margin-bottom:1.2rem}
+    .dayBlock h3{margin:.2rem 0 .6rem;font-size:1rem;color:var(--green)}
+    .expense{background:var(--white);border-radius:12px;padding:.8rem 1rem;margin:.4rem 0;display:flex;align-items:center}
+    .expense .emoji{font-size:1.3rem;margin-right:.6rem}
+    .expense .amount{margin-left:auto;font-weight:600}
+    .expense .del{background:none;border:none;color:var(--red);font-size:1.2rem;margin-left:.6rem;cursor:pointer}
+    #addBtn{position:fixed;bottom:1.2rem;right:1.2rem;background:var(--green);color:var(--white);border:none;border-radius:50px;padding:.8rem 1.2rem;font-size:1rem;box-shadow:0 2px 8px rgba(0,0,0,.2);cursor:pointer}
+    #modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.3);display:none;align-items:flex-end}
+    #sheet{background:var(--white);width:100%;border-radius:24px 24px 0 0;padding:1.5rem 1rem;max-height:65%;overflow:auto}
+    #sheet input,#sheet select{width:100%;padding:.8rem;margin:.5rem 0;border:1px solid #ccc;border-radius:8px;font-size:1rem}
+    #sheet button{width:100%;background:var(--green);color:var(--white);border:none;padding:.8rem;font-size:1rem;border-radius:8px;margin-top:.5rem;cursor:pointer}
+    #folderModal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center}
+    #folderBox{background:var(--white);padding:1.2rem;border-radius:12px;width:90%;max-width:320px}
+    #folderBox input{width:100%;padding:.6rem;margin:.5rem 0;border:1px solid #ccc;border-radius:6px}
+    #folderBox button{width:100%;padding:.6rem;margin-top:.5rem;border:none;border-radius:6px;background:var(--green);color:#fff;font-size:1rem;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header>
+    <span>MT</span>
+    <span id="wallet">$0.00</span>
+  </header>
+
+  <main id="main"></main>
+
+  <button id="addBtn">+</button>
+
+  <!-- Add expense sheet -->
+  <div id="modal">
+    <div id="sheet">
+      <input id="amt" type="number" step=".01" placeholder="Amount" required/>
+      <select id="cat"></select>
+      <button onclick="saveExpense()">Save</button>
+    </div>
+  </div>
+
+  <!-- New folder dialog -->
+  <div id="folderModal">
+    <div id="folderBox">
+      <h3>New folder (category)</h3>
+      <input id="newFolder" placeholder="e.g. Gym" maxlength="20"/>
+      <button onclick="saveFolder()">Create</button>
+    </div>
+  </div>
+
+  <script>
+    /* ----------  CONFIG  ---------- */
+    const MULTIPLIER = 2;               // change if you want 3x, 1.5x etc.
+
+    /* ----------  DATA  ---------- */
+    let expenses = JSON.parse(localStorage.getItem('mt_exp')) || [];
+    let folders  = JSON.parse(localStorage.getItem('mt_folders')) || ['Food','Transport','Shopping','Health','Other'];
+    const emojis = {Food:'🍔',Transport:'🚕',Shopping:'🛍️',Health:'🏥',Other:'💸'};
+
+    /* ----------  DOM  ---------- */
+    const main      = document.getElementById('main');
+    const wallet    = document.getElementById('wallet');
+    const addBtn    = document.getElementById('addBtn');
+    const modal     = document.getElementById('modal');
+    const sheetCat  = document.getElementById('cat');
+    const amt       = document.getElementById('amt');
+    const folderModal=document.getElementById('folderModal');
+    const newFolder = document.getElementById('newFolder');
+
+    /* ----------  EVENTS  ---------- */
+    addBtn.onclick   = ()=>openExpense();
+    addBtn.oncontextmenu = e=>{e.preventDefault();openFolder()};
+    modal.onclick    = e=>{if(e.target===modal)closeExpense()};
+    folderModal.onclick=e=>{if(e.target===folderModal)closeFolder()};
+
+    /* ----------  FOLDER  ---------- */
+    function openFolder(){folderModal.style.display='flex';newFolder.focus();newFolder.value='';}
+    function closeFolder(){folderModal.style.display='none';}
+    function saveFolder(){
+      const name = newFolder.value.trim();
+      if(!name || folders.includes(name)) return;
+      folders.unshift(name);
+      localStorage.setItem('mt_folders',JSON.stringify(folders));
+      closeFolder(); populateCatSelect();
+    }
+
+    /* ----------  EXPENSE  ---------- */
+    function openExpense(){
+      populateCatSelect();
+      modal.style.display='flex';amt.focus();
+    }
+    function closeExpense(){modal.style.display='none';amt.value='';}
+    function populateCatSelect(){
+      sheetCat.innerHTML='';
+      folders.forEach(f=>{
+        const opt=document.createElement('option');
+        opt.value=f;opt.textContent=f;
+        sheetCat.appendChild(opt);
+      });
+    }
+
+    function saveExpense(){
+      const v = parseFloat(amt.value);
+      if(!v) return;
+      expenses.unshift({amount:v, category:sheetCat.value, date:Date.now()});
+      localStorage.setItem('mt_exp', JSON.stringify(expenses));
+      closeExpense(); render();
+    }
+    function deleteExpense(index){
+      if(!confirm('Delete this expense?')) return;
+      expenses.splice(index,1);
+      localStorage.setItem('mt_exp', JSON.stringify(expenses));
+      render();
+    }
+
+    /* ----------  RENDER  ---------- */
+    function render(){
+      main.innerHTML='';
+      wallet.textContent = `$${grandTotal().toFixed(2)}`;
+
+      // group by calendar day (midnight based)
+      const groups = {};
+      expenses.forEach(ex=>{
+        const d = new Date(ex.date).toDateString();
+        (groups[d] = groups[d] || []).push(ex);
+      });
+
+      Object.keys(groups).sort((a,b)=>new Date(b)-new Date(a)).forEach(day=>{
+        const dayBlock = document.createElement('div');
+        dayBlock.className='dayBlock';
+        const spent = groups[day].reduce((s,e)=>s+e.amount,0);
+        const multiplied = spent * MULTIPLIER;
+
+        dayBlock.innerHTML = `<h3>${day} &nbsp;|&nbsp; Spent: $${spent.toFixed(2)} &nbsp;|&nbsp; ×${MULTIPLIER} = $${multiplied.toFixed(2)}</h3>`;
+
+        groups[day].forEach((e,i)=>{
+          const div=document.createElement('div');
+          div.className='expense';
+          const emoji = emojis[e.category] || '📁';
+          div.innerHTML=`<span class="emoji">${emoji}</span>
+                         <span>${e.category}</span>
+                         <span class="amount">-$${e.amount.toFixed(2)}</span>
+                         <button class="del" title="Delete">🗑️</button>`;
+          div.querySelector('.del').onclick=()=>deleteExpense(expenses.indexOf(e));
+          dayBlock.appendChild(div);
+        });
+        main.appendChild(dayBlock);
+      });
+    }
+
+    function grandTotal(){
+      return expenses.reduce((a,c)=>a+c.amount,0);
+    }
+
+    render();
+  </script>
+</body>
+</html>
